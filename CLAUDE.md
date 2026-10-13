@@ -6,12 +6,16 @@ A Claude Code mod. The README describes what it does.
 
 Run `pnpm check` (validate and test) after each change. The pre-commit hook also runs it.
 
-## After a push
+## Release
 
-Claude Code runs the copy of the mod that it made at install time, not this folder. After each push to `main`, always update the local installation:
+Claude Code runs the copy of the mod that it made at install time, not this folder. It updates that copy only when the `version` in `.claude-plugin/plugin.json` changes, not on each commit.
 
-```
-claude plugin update agent-history@zirkelc
-```
+1. When a change touches the shipped files (`hooks`, `types`, `.claude-plugin`), raise `version` in `.claude-plugin/plugin.json` and `package.json`. CI fails when shipped files changed after the last version change.
+2. Push to `main`.
+3. Update the local installation:
 
-Then tell the user to run `/reload-plugins`, so the running sessions load the new version.
+   ```
+   claude plugin update agent-history@zirkelc
+   ```
+
+4. Tell the user to run `/reload-plugins`, so the running sessions load the new version.
