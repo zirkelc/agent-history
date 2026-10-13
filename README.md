@@ -149,9 +149,11 @@ The test uses an expired token. I updated the fixture.
 ## Development
 
 ```
-claude plugin validate .
-claude plugin test .
+pnpm install
+pnpm check
 ```
+
+`pnpm check` runs `claude plugin validate .` and `claude plugin test .`. `pnpm install` also sets up a git pre-commit hook (with `simple-git-hooks`) that runs `pnpm check` before each commit.
 
 ## License
 

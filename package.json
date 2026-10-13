@@ -1,0 +1,20 @@
+{
+  "name": "agent-history",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Claude Code mod that exports your sessions to a folder and syncs them with git",
+  "license": "MIT",
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "validate": "claude plugin validate .",
+    "test": "claude plugin test .",
+    "check": "pnpm validate && pnpm test",
+    "prepare": "simple-git-hooks"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "pnpm check"
+  },
+  "devDependencies": {
+    "simple-git-hooks": "2.14.0"
+  }
+}
