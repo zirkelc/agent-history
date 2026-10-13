@@ -1,0 +1,78 @@
+{
+  "name": "agent-history",
+  "version": "0.1.0",
+  "description": "Agent History: exports every Claude Code session and its subagents to a folder, and commits and pushes it when the folder is a git repository",
+  "author": {
+    "name": "Chris Cook"
+  },
+  "license": "MIT",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "exportDir": {
+      "type": "string",
+      "title": "Export folder",
+      "description": "Absolute path (or ~/...) of the folder the sessions are exported to. Git is used when the folder is a git repository.",
+      "required": true
+    },
+    "exportJsonl": {
+      "type": "boolean",
+      "title": "Export JSONL",
+      "description": "Write <uuid>.jsonl for each session and subagent.",
+      "default": true
+    },
+    "exportMarkdown": {
+      "type": "boolean",
+      "title": "Export Markdown",
+      "description": "Write <uuid>.md for each session and subagent.",
+      "default": true
+    },
+    "includeText": {
+      "type": "boolean",
+      "title": "Include text",
+      "description": "Keep the text of user and assistant messages.",
+      "default": true
+    },
+    "includeToolUse": {
+      "type": "boolean",
+      "title": "Include tool calls",
+      "description": "Keep each tool call with its tool name.",
+      "default": true
+    },
+    "includeToolInput": {
+      "type": "boolean",
+      "title": "Include tool input",
+      "description": "Keep the input of each tool call. Needs tool calls.",
+      "default": false
+    },
+    "includeToolResults": {
+      "type": "boolean",
+      "title": "Include tool results",
+      "description": "Keep tool results. They are the largest part of a transcript.",
+      "default": false
+    },
+    "includeThinking": {
+      "type": "boolean",
+      "title": "Include thinking",
+      "description": "Keep thinking blocks.",
+      "default": false
+    },
+    "includeMeta": {
+      "type": "boolean",
+      "title": "Include meta rows",
+      "description": "Keep rows Claude Code adds itself: reminders, attachments, system rows, summaries.",
+      "default": false
+    },
+    "autoPush": {
+      "type": "boolean",
+      "title": "Push after commit",
+      "description": "Push each commit when the repository has a remote.",
+      "default": true
+    },
+    "commitDelaySeconds": {
+      "type": "number",
+      "title": "Commit delay (seconds)",
+      "description": "Wait this long after the last export before commit and push, so turns close together make one commit.",
+      "default": 60
+    }
+  }
+}

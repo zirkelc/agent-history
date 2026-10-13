@@ -1,0 +1,1 @@
+{ "description": "Exports sessions and syncs them with git", "modules": ["./register.tsx"] }

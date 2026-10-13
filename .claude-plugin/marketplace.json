@@ -1,0 +1,13 @@
+{
+  "name": "agent-history",
+  "description": "Agent History: a Claude Code mod that exports your sessions to a folder and syncs them with git",
+  "owner": {
+    "name": "Chris Cook"
+  },
+  "plugins": [
+    {
+      "name": "agent-history",
+      "source": "./"
+    }
+  ]
+}
