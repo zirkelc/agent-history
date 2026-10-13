@@ -9,13 +9,14 @@ A Claude Code mod that keeps a history of your sessions. After each turn, it exp
 
 ## Install
 
-Type this at the prompt of a Claude Code terminal session:
+Type these commands at the prompt of a Claude Code terminal session:
 
 ```
-/plugin install agent-history --marketplace zirkelc/agent-history
+/plugin marketplace add zirkelc/agent-plugins
+/plugin install agent-history@zirkelc
 ```
 
-You do not need to add the marketplace first. The command asks `Add marketplace?`: answer `y`. Then select a scope (user scope is the default) and set the export folder on the settings screen.
+Select a scope (user scope is the default), then set the export folder on the settings screen.
 
 ## Settings
 
