@@ -55,6 +55,7 @@ export function world(on: On, options: WorldOptions = {}) {
   on('ui.close', () => ({ value: undefined }))
   on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('session.end', ($, e) => ({ sessionId: e.sessionId }))
+  on('session.id', () => ({ value: SESSION_ID }))
   on('command.register', () => ({ value: { command: 'agent-history' } }))
   on('classic.Stop', () => ({}))
   on('classic.SubagentStop', () => ({}))

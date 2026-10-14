@@ -19,6 +19,8 @@ export type PaneActions = {
 export type PaneModel = {
   status: AgentHistoryStatus
   log: ReadonlyArray<AgentHistoryLogEntry>
+  /** The session the log belongs to; each session has its own log. */
+  sessionId: string
   config: Config
   /** The columns inside the pane's padding. */
   columns: number
@@ -42,8 +44,8 @@ const SYNC_ICON = '⇅'
 /** The columns a row's label takes, so the values of every row start in one column. */
 const LABEL_WIDTH = 'Content'.length
 
-/** The rows around the log: header and margin, four info rows and the hint, two rules, the log's title, the status line. */
-const OUTER_ROWS = 2 + 5 + 2 + 1 + 1
+/** The rows around the log: header and margin, five info rows and the hint, two rules, the log's title, the status line. */
+const OUTER_ROWS = 2 + 6 + 2 + 1 + 1
 
 /** The width of the step column in the log. */
 const STEP_WIDTH = 'commit'.length
@@ -161,13 +163,19 @@ function gitValue(ui: Ui, model: PaneModel): RenderElement {
 function infoView(ui: Ui, model: PaneModel): Array<RenderElement> {
   const { Text } = ui
   const { config, status } = model
-  const folder = status.repo?.exportDir ?? (config.exportDir || 'not set: /config')
+  const folder = status.repo?.exportDir ?? config.exportDir
   const formats = config.formats.map(format => FORMAT_LABELS[format]).join(' · ') || 'meta only'
   const content = FILTER_LABELS.filter(([key]) => config.filters[key])
     .map(([, label]) => label)
     .join(' · ')
   return [
-    row(ui, 'folder', 'Folder', pathFit(folder, model.columns - LABEL_WIDTH - 1)),
+    row(ui, 'session', 'Session', fit(model.sessionId, model.columns - LABEL_WIDTH - 1)),
+    row(
+      ui,
+      'folder',
+      'Folder',
+      folder ? pathFit(folder, model.columns - LABEL_WIDTH - 1) : <Text color="yellow">not set: /config</Text>,
+    ),
     row(ui, 'git', 'Git', gitValue(ui, model)),
     row(ui, 'formats', 'Formats', formats),
     row(ui, 'content', 'Content', fit(content || 'nothing', model.columns - LABEL_WIDTH - 1)),
@@ -201,7 +209,7 @@ function logView(ui: Ui, model: PaneModel): Array<RenderElement> {
     shown.length === 0
       ? [
           <Text key="empty" dimColor>
-            Nothing exported yet. The next turn exports this session.
+            Nothing exported in this session yet. The next turn exports it.
           </Text>,
         ]
       : shown.map((entry, at) => logRow(ui, model, entry, at))
@@ -279,7 +287,7 @@ export function paneView(ui: Ui, actions: PaneActions, model: PaneModel): Render
       {headerView(ui, actions, model)}
       {infoView(ui, model)}
       {ruleView(ui, model, 'rule:log')}
-      <Text bold>Activity</Text>
+      <Text bold>Activity in this session</Text>
       {logView(ui, model)}
       {ruleView(ui, model, 'rule:status')}
       {statusView(ui, model)}

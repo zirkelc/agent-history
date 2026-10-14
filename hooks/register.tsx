@@ -105,7 +105,7 @@ async function renderPane(
   syncOf: () => Sync | undefined,
 ) {
   const { Box, Text, Button } = $.ui.resolve(e)
-  const [value, entries] = await Promise.all([read($, status), read($, log)])
+  const [value, entries, sessionId] = await Promise.all([read($, status), read($, log), $.session.id()])
 
   return paneView(
     { Box, Text, Button },
@@ -117,6 +117,7 @@ async function renderPane(
     {
       status: value,
       log: entries,
+      sessionId,
       config,
       columns: Math.max(e.props.bodyColumns - 2 * PADDING - 1, 20),
       bodyRows: e.props.scroll.bodyRows,
