@@ -56,7 +56,7 @@ export function createSync(host: Host, config: Config) {
 
     if (!exportDir) {
       repo = { isRepo: false }
-      await setStatus(value => ({ ...value, mode: 'unset', repo: undefined, warning: 'no export folder' }))
+      await setStatus(value => ({ ...value, mode: 'unset', repo: undefined, warning: 'set the export folder in /config' }))
       return
     }
 

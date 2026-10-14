@@ -1,6 +1,6 @@
 {
   "name": "agent-history",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Agent History: exports every Claude Code session and its subagents to a folder, and commits and pushes it when the folder is a git repository",
   "author": {
     "name": "Chris Cook"
@@ -11,8 +11,7 @@
     "exportDir": {
       "type": "string",
       "title": "Export folder",
-      "description": "Absolute path (or ~/...) of the folder the sessions are exported to. Git is used when the folder is a git repository.",
-      "required": true
+      "description": "Absolute path (or ~/...) of the folder the sessions are exported to. Git is used when the folder is a git repository. Nothing is exported while it is empty."
     },
     "exportJsonl": {
       "type": "boolean",

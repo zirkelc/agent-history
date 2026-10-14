@@ -24,7 +24,7 @@ Open `/config` and search for `agent-history` to change the settings.
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| Export folder | (required) | Absolute path or `~/...` of the folder to export to |
+| Export folder | (none) | Absolute path or `~/...` of the folder to export to. Until it is set, nothing is exported and the status line asks you to set it |
 | Export JSONL | on | Write `<uuid>.jsonl` for each session and subagent |
 | Export Markdown | on | Write `<uuid>.md` for each session and subagent |
 | Include text | on | Keep the text of user and assistant messages |

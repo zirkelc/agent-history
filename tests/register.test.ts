@@ -27,6 +27,20 @@ describe('register', () => {
     expect(w.files.get(`${SESSION_DIR}/${SESSION_ID}.md`)).toContain('_[Tool: Bash]_')
   })
 
+  test('an unset export folder warns to set it and exports nothing', async ($, on) => {
+    // Arrange
+    const w = world(on)
+    await $.session.start(SESSION)
+
+    // Act
+    await $.classic.Stop(STOP)
+    await w.clock.advance(COMMIT_DELAY_MS)
+
+    // Assert
+    expect([...w.files.keys()].filter(path => path.includes('/sessions/')).length).toBe(0)
+    expect(w.statuses[w.statuses.length - 1]).toBe('set the export folder in /config')
+  })
+
   test('a folder that is no repository gets no git: no init, no commit, no warning', OPTIONS, async ($, on) => {
     // Arrange
     const w = world(on)

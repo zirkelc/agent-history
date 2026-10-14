@@ -242,7 +242,7 @@ function statusView(ui: Ui, model: PaneModel): RenderElement {
   const { status } = model
   const warning = warningText(model)
   if (warning) {
-    const color = status.warning === 'no remote' ? 'yellow' : 'red'
+    const color = status.warning === 'no remote' || status.mode === 'unset' ? 'yellow' : 'red'
     const rows = rowsOf(warning, model.columns, WARNING_ROWS)
     return (
       <Box key="status" flexDirection="column">
