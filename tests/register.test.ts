@@ -246,6 +246,97 @@ describe('register', () => {
     expect(w.files.get(`${SESSION_DIR}/${SESSION_ID}.md`)).toContain(secret)
   })
 
+  test('a secret in the transcript warns in the status line and is logged once', OPTIONS, async ($, on) => {
+    // Arrange
+    const w = world(on)
+    w.files.set(TRANSCRIPT, withSecret(w.files.get(TRANSCRIPT) ?? ''))
+    await $.session.start(SESSION)
+
+    // Act
+    await $.classic.Stop(STOP)
+    await $.classic.Stop(STOP)
+    await w.clock.settle()
+
+    // Assert
+    expect(w.statuses[w.statuses.length - 1]).toBe('1 secret redacted in this session')
+    const ui = await mountPane($)
+    const secretRows = (await logTexts(ui)).filter(text => text.includes('secret'))
+    expect(secretRows.length).toBe(1)
+    expect(secretRows[0]).toContain('1 new secret redacted (anthropic)')
+    expect((await ui.find({ key: 'status' }))?.text).toBe('⚠ 1 secret redacted in this session')
+    await ui.unmount()
+  })
+
+  test('secrets of the session and its agents add up', OPTIONS, async ($, on) => {
+    // Arrange
+    const w = world(on)
+    const agentPath = '/home/me/.claude/projects/-work/session-1/subagents/agent-a1.jsonl'
+    w.files.set(TRANSCRIPT, withSecret(w.files.get(TRANSCRIPT) ?? ''))
+    w.files.set(agentPath, w.files.get(TRANSCRIPT) ?? '')
+    await $.session.start(SESSION)
+
+    // Act
+    await $.classic.SubagentStop({ ...STOP, agent_id: 'a1', agent_type: 'Explore', agent_transcript_path: agentPath })
+    await $.classic.Stop(STOP)
+    await w.clock.settle()
+
+    // Assert
+    expect(w.statuses[w.statuses.length - 1]).toBe('2 secrets redacted in this session')
+  })
+
+  test('opening the panel clears the secret warning until a new secret is found', OPTIONS, async ($, on) => {
+    // Arrange
+    const w = world(on)
+    w.files.set(TRANSCRIPT, withSecret(w.files.get(TRANSCRIPT) ?? ''))
+    await $.session.start(SESSION)
+    await $.classic.Stop(STOP)
+    await w.clock.settle()
+
+    // Act
+    await $.command.run({ command: 'agent-history', args: '', origin: { kind: 'human' } as never, presentation: {} as never })
+    await w.clock.settle()
+    const afterOpen = w.statuses[w.statuses.length - 1]
+    await $.classic.Stop(STOP)
+    await w.clock.settle()
+    const afterSameSecret = w.statuses[w.statuses.length - 1]
+    w.files.set(TRANSCRIPT, (w.files.get(TRANSCRIPT) ?? '').replace('Done.', `Done, also ${'gh' + 'p_' + 'Ef3'.repeat(12)}`))
+    await $.classic.Stop(STOP)
+    await w.clock.settle()
+
+    // Assert
+    expect(afterOpen).toBe(undefined)
+    expect(afterSameSecret).toBe(undefined)
+    expect(w.statuses[w.statuses.length - 1]).toBe('2 secrets redacted in this session')
+  })
+
+  test('a failed push has priority over the secret warning', OPTIONS, async ($, on) => {
+    // Arrange
+    const w = world(on, { isRepo: true, remotes: ['origin'], pushFails: true })
+    w.files.set(TRANSCRIPT, withSecret(w.files.get(TRANSCRIPT) ?? ''))
+    await $.session.start(SESSION)
+
+    // Act
+    await $.classic.Stop(STOP)
+    await w.clock.advance(COMMIT_DELAY_MS)
+
+    // Assert
+    expect(w.statuses[w.statuses.length - 1]).toBe('push failed')
+  })
+
+  test('with redaction off, the warning says the secrets were exported', { options: { exportDir: '~/history', redactSecrets: false } }, async ($, on) => {
+    // Arrange
+    const w = world(on)
+    w.files.set(TRANSCRIPT, withSecret(w.files.get(TRANSCRIPT) ?? ''))
+    await $.session.start(SESSION)
+
+    // Act
+    await $.classic.Stop(STOP)
+    await w.clock.settle()
+
+    // Assert
+    expect(w.statuses[w.statuses.length - 1]).toBe('1 possible secret exported in this session (redaction is off)')
+  })
+
   test('formats and filters follow the config', { options: { exportDir: '~/history', exportMarkdown: false, includeToolUse: false } }, async ($, on) => {
     // Arrange
     const w = world(on)
@@ -260,6 +351,32 @@ describe('register', () => {
     expect(w.files.get(`${SESSION_DIR}/${SESSION_ID}.jsonl`)).not.toContain('tool_use')
   })
 })
+
+const SECRET = 'sk-' + 'ant-api03-' + 'Ab1'.repeat(10)
+
+function withSecret(text: string): string {
+  return text.replace('Fix the bug', `Fix the bug, the key is ${SECRET}`)
+}
+
+function mountPane($: Parameters<Parameters<typeof test>[2]>[0]) {
+  return $.ui.mount({
+    plugin: 'agent-history',
+    surface: 'terminal',
+    component: 'Pane',
+    requestId: 'agent-history',
+    props: { title: 'agent-history', isFocused: true, bodyColumns: 80, placement: 'dock', scroll: { bodyRows: 30 } as never, view: {} as never },
+  })
+}
+
+// The text of each log row, newest first.
+async function logTexts(ui: Awaited<ReturnType<typeof mountPane>>): Promise<Array<string>> {
+  const texts: Array<string> = []
+  for (let at = 0; ; at += 1) {
+    const row = await ui.find({ key: `log:${at}` })
+    if (!row) return texts
+    texts.push(row.text)
+  }
+}
 
 describe('pane', () => {
   for (const surface of ['terminal', 'desktop'] as const) {

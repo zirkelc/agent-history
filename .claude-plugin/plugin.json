@@ -1,6 +1,6 @@
 {
   "name": "agent-history",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Agent History: exports every Claude Code session and its subagents to a folder, and commits and pushes it when the folder is a git repository",
   "author": {
     "name": "Chris Cook"

@@ -4,6 +4,7 @@ import type { Host } from './host'
 import { factsOf, parseMeta, serializeMeta, withAgent } from './meta'
 import type { AgentMeta, SessionMeta } from './meta'
 import { redactSecrets } from './redact'
+import type { Redaction } from './redact'
 import { renderMarkdown } from './render'
 import { filterTranscript, keepsEverything, parseTranscript, serializeTranscript } from './transcript'
 
@@ -31,14 +32,14 @@ export function sessionDirOf(exportDir: string, sessionId: string): string {
   return `${exportDir}/${SESSIONS_DIR}/${sessionId}`
 }
 
-/** Writes the session's meta file and the formats the config asks for; resolves how many secrets were redacted. */
+/** Writes the session's meta file and the formats the config asks for; resolves the secrets found, by kind. */
 export async function exportSession(host: Host, config: Config, exportDir: string, source: SessionSource) {
   const dir = sessionDirOf(exportDir, source.sessionId)
   const raw = await readText(host, source.transcriptPath)
   const lines = parseTranscript(raw)
   const facts = factsOf(lines)
 
-  const redacted = await writeFormats(host, config, `${dir}/${source.sessionId}`, raw)
+  const secrets = await writeFormats(host, config, `${dir}/${source.sessionId}`, raw)
 
   const cwd = facts.cwd ?? source.cwd
   const previous = parseMeta(await readIfExists(host, metaPathOf(dir, source.sessionId)))
@@ -53,7 +54,7 @@ export async function exportSession(host: Host, config: Config, exportDir: strin
     export: exportInfo(config),
   }
   await host.write(metaPathOf(dir, source.sessionId), serializeMeta(meta))
-  return redacted
+  return secrets
 }
 
 /**
@@ -62,7 +63,7 @@ export async function exportSession(host: Host, config: Config, exportDir: strin
  * run yet gets a meta file that holds the agent alone; the session's export
  * fills in the rest and keeps the agent.
  *
- * Resolves how many secrets were redacted, or false, with nothing written,
+ * Resolves the secrets found, by kind, or false, with nothing written,
  * for an agent Claude Code keeps no transcript of: internal agents end like
  * any other but are never saved.
  */
@@ -73,7 +74,7 @@ export async function exportAgent(host: Host, config: Config, exportDir: string,
   const raw = await readText(host, source.transcriptPath)
   const facts = factsOf(parseTranscript(raw))
 
-  const redacted = await writeFormats(host, config, `${dir}/agents/${source.agentId}`, raw)
+  const secrets = await writeFormats(host, config, `${dir}/agents/${source.agentId}`, raw)
 
   const agent: AgentMeta = {
     agentId: source.agentId,
@@ -91,7 +92,7 @@ export async function exportAgent(host: Host, config: Config, exportDir: string,
     export: exportInfo(config),
   }
   await host.write(metaPathOf(dir, source.sessionId), serializeMeta({ ...meta, agents: withAgent(meta.agents, agent) }))
-  return redacted
+  return secrets
 }
 
 function metaPathOf(dir: string, sessionId: string): string {
@@ -109,29 +110,31 @@ function exportInfo(config: Config): SessionMeta['export'] {
 
 /**
  * `base` is the path without its extension. With every filter on, the JSONL
- * is the transcript as it is, but for the secrets taken out of it. Resolves
- * the most secrets redacted from one format, since each format holds the same
- * ones.
+ * is the transcript as it is, but for the secrets taken out of it. The scan
+ * also runs with redaction off, to tell how many secrets were exported.
+ * Resolves the secrets of the format that holds the most, since each format
+ * holds the same ones.
  */
-async function writeFormats(host: Host, config: Config, base: string, raw: string): Promise<number> {
-  if (config.formats.length === 0) return 0
-
+async function writeFormats(host: Host, config: Config, base: string, raw: string): Promise<Redaction['kinds']> {
   const isWhole = keepsEverything(config.filters)
   const lines = filterTranscript(parseTranscript(raw), config.filters)
-  const clean = (text: string) => (config.redactSecrets ? redactSecrets(text) : { text, count: 0 })
-  let count = 0
+  const scan = (text: string) => {
+    const found = redactSecrets(text)
+    return config.redactSecrets ? found : { ...found, text }
+  }
+  let most: Redaction | undefined
 
   if (config.formats.includes('jsonl')) {
-    const jsonl = clean(isWhole ? raw : serializeTranscript(lines))
+    const jsonl = scan(isWhole ? raw : serializeTranscript(lines))
     await host.write(`${base}.jsonl`, jsonl.text)
-    count = Math.max(count, jsonl.count)
+    most = jsonl
   }
   if (config.formats.includes('markdown')) {
-    const markdown = clean(renderMarkdown(lines))
+    const markdown = scan(renderMarkdown(lines))
     await host.write(`${base}.md`, markdown.text)
-    count = Math.max(count, markdown.count)
+    if (!most || markdown.count > most.count) most = markdown
   }
-  return count
+  return most?.kinds ?? {}
 }
 
 async function readIfExists(host: Host, path: string): Promise<string | undefined> {

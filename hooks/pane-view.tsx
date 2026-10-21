@@ -2,7 +2,7 @@ import type { ElementTable, RenderElement } from 'claude-code'
 
 import type { AgentHistoryLogEntry, AgentHistoryStatus } from '../types'
 import type { Config } from './config'
-import { clockTime } from './sync'
+import { clockTime, secretsText } from './sync'
 import type { Filters } from './transcript'
 
 /** The elements the pane draws with, on the surfaces that have all of them. */
@@ -191,16 +191,17 @@ function infoView(ui: Ui, model: PaneModel): Array<RenderElement> {
   ]
 }
 
-/** One log line, always one row so the rows below never move: the dim time, a green or red dot, the step, then what it did. */
+/** One log line, always one row so the rows below never move: the dim time, a green, yellow or red dot, the step, then what it did. */
 function logRow(ui: Ui, model: PaneModel, entry: AgentHistoryLogEntry, at: number): RenderElement {
   const { Box, Text } = ui
   const room = model.columns - 5 - 1 - 1 - 1 - STEP_WIDTH - 1
+  const color = entry.isOk ? undefined : entry.step === 'secret' ? 'yellow' : 'red'
   return (
     <Box key={`log:${at}`} flexDirection="row" columnGap={1}>
       <Text dimColor>{clockTime(entry.at)}</Text>
-      <Text color={entry.isOk ? 'green' : 'red'}>⏺</Text>
+      <Text color={color ?? 'green'}>⏺</Text>
       <Text bold={!entry.isOk}>{entry.step.padEnd(STEP_WIDTH, ' ')}</Text>
-      <Text dimColor={entry.isOk} color={entry.isOk ? undefined : 'red'} wrap="truncate">
+      <Text dimColor={entry.isOk} color={color} wrap="truncate">
         {fit(entry.message, room)}
       </Text>
     </Box>
@@ -226,10 +227,10 @@ function logView(ui: Ui, model: PaneModel): Array<RenderElement> {
   return [...lines, ...pad]
 }
 
-/** The warning with the message of the step that failed, which says what to fix. */
+/** The warning with the message of the step that failed, which says what to fix; else the secrets found. */
 function warningText(model: PaneModel): string | undefined {
-  const { warning } = model.status
-  if (!warning) return undefined
+  const { warning, secrets } = model.status
+  if (!warning) return secrets ? `⚠ ${secretsText(secrets)}` : undefined
   const failed = [...model.log].reverse().find(entry => !entry.isOk)
   const detail = failed && warning.startsWith(failed.step) ? `: ${failed.message}` : ''
   return `⚠ ${warning}${detail}`
@@ -250,13 +251,14 @@ function footRowsOf(model: PaneModel): number {
   return warning ? Math.max(rowsOf(warning, model.columns, WARNING_ROWS).length, 1) : 1
 }
 
-/** The foot: the warning in full while one stands, else when each step last ran and what waits for the next commit, its mark at the end of the rule above. */
+/** The foot: the warning or the secrets in full while one stands, else when each step last ran and what waits for the next commit, its mark at the end of the rule above. */
 function statusView(ui: Ui, model: PaneModel): RenderElement {
   const { Box, Text } = ui
   const { status } = model
   const warning = warningText(model)
   if (warning) {
-    const color = status.warning === 'no remote' || status.mode === 'unset' ? 'yellow' : 'red'
+    const isMild = !status.warning || status.warning === 'no remote' || status.mode === 'unset'
+    const color = isMild ? 'yellow' : 'red'
     const rows = rowsOf(warning, model.columns, WARNING_ROWS)
     return (
       <Box key="status" flexDirection="column">

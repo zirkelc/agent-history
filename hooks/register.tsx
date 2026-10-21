@@ -58,9 +58,10 @@ export const register: Register = (on, options) => {
     return next(e)
   })
 
-  /** Opening the panel reads the folder again, so it shows the repository as it is now. */
+  /** Opening the panel reads the folder again, so it shows the repository as it is now, and marks the secrets as seen. */
   on('command.run', { command: 'agent-history' }, async $ => {
     void sync?.check()
+    void sync?.seenSecrets()
     await $.ui.open(PANE)
 
     return { text: 'agent-history panel opened.' }

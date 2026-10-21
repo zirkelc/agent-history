@@ -1,6 +1,6 @@
 import type { Timer } from 'claude-code'
 
-import type { AgentHistoryLogEntry, AgentHistoryMode, AgentHistoryStatus } from '../types'
+import type { AgentHistoryLogEntry, AgentHistoryMode, AgentHistorySecrets, AgentHistoryStatus } from '../types'
 import { expandHome } from './config'
 import type { Config } from './config'
 import { SESSIONS_DIR, exportAgent, exportSession } from './exporter'
@@ -8,6 +8,7 @@ import type { AgentSource, SessionSource } from './exporter'
 import { commit, initRepo, push, repoState } from './git'
 import type { Host } from './host'
 import type { RepoState } from './git'
+import type { Redaction } from './redact'
 
 const MAX_LOG = 50
 
@@ -25,6 +26,8 @@ export function createSync(host: Host, config: Config) {
   let timer: Timer | undefined
   /** The last transcript seen per session, exported once more when the session ends. */
   const sources = new Map<string, SessionSource>()
+  /** The secrets found by kind in the last export of each transcript: the session's under its id, an agent's under its agent id. */
+  const secrets = new Map<string, Redaction['kinds']>()
 
   function enqueue<T>(task: () => Promise<T>): Promise<T | undefined> {
     const run = queue.then(task).catch(() => undefined)
@@ -94,6 +97,25 @@ export function createSync(host: Host, config: Config) {
     schedule()
   }
 
+  /**
+   * Each export holds the whole transcript, so only kinds whose count went up
+   * are new. A new secret gets one log entry and shows the warning again.
+   */
+  async function found(key: string, kinds: Redaction['kinds']) {
+    const before = secrets.get(key) ?? {}
+    secrets.set(key, kinds)
+    const added = Object.entries(kinds)
+      .map(([kind, count]) => [kind, count - (before[kind] ?? 0)] as const)
+      .filter(([, count]) => count > 0)
+    if (added.length === 0) return
+
+    const count = added.reduce((sum, [, n]) => sum + n, 0)
+    const what = config.redactSecrets ? `secret${plural(count)} redacted` : `possible secret${plural(count)} exported`
+    await record('secret', false, `${count} new ${what} (${added.map(([kind]) => kind).join(', ')})`)
+    const total = [...secrets.values()].reduce((sum, each) => sum + Object.values(each).reduce((a, n) => a + n, 0), 0)
+    await setStatus(value => ({ ...value, secrets: { count: total, isRedacted: config.redactSecrets, isSeen: false } }))
+  }
+
   async function commitAndPush(timeoutMs?: number) {
     if (!repo.isRepo) return
 
@@ -137,28 +159,30 @@ export function createSync(host: Host, config: Config) {
       sources.set(source.sessionId, source)
       return enqueue(async () => {
         if (!exportDir) return
-        let redacted = 0
+        let kinds: Redaction['kinds']
         try {
-          redacted = await exportSession(host, config, exportDir, source)
+          kinds = await exportSession(host, config, exportDir, source)
         } catch (error) {
           return fail('export', error)
         }
-        await exported(source.sessionId, `session ${source.sessionId}${redactedNote(redacted)}`)
+        await exported(source.sessionId, `session ${source.sessionId}`)
+        await found(source.sessionId, kinds)
       })
     },
 
     exportAgent(source: AgentSource) {
       return enqueue(async () => {
         if (!exportDir) return
-        let redacted = 0
+        let kinds: Redaction['kinds']
         try {
           const result = await exportAgent(host, config, exportDir, source)
           if (result === false) return
-          redacted = result
+          kinds = result
         } catch (error) {
           return fail('export', error)
         }
-        await exported(source.sessionId, `agent ${source.agentType} ${source.agentId}${redactedNote(redacted)}`)
+        await exported(source.sessionId, `agent ${source.agentType} ${source.agentId}`)
+        await found(`${source.sessionId}/${source.agentId}`, kinds)
       })
     },
 
@@ -196,6 +220,13 @@ export function createSync(host: Host, config: Config) {
       })
     },
 
+    /** The panel shows the secrets, so the status line stops to show them until a new one is found. */
+    seenSecrets() {
+      return enqueue(() =>
+        setStatus(value => (value.secrets ? { ...value, secrets: { ...value.secrets, isSeen: true } } : value)),
+      )
+    },
+
     dispose() {
       timer?.cancel()
       timer = undefined
@@ -204,17 +235,24 @@ export function createSync(host: Host, config: Config) {
 }
 
 /**
- * The status line: the warning while one stands, otherwise none. Claude Code
- * draws every mod's status line as a warning with the mod's name in front, so
- * a line for a good state would read as a problem.
+ * The status line: the warning while one stands, else the secrets not yet
+ * seen in the panel, otherwise none. Claude Code draws every mod's status line
+ * as a warning with the mod's name in front, so a line for a good state would
+ * read as a problem.
  */
 export function statusLine(value: AgentHistoryStatus): string | undefined {
-  return value.warning
+  return value.warning ?? (value.secrets && !value.secrets.isSeen ? secretsText(value.secrets) : undefined)
 }
 
-// The log's note for secrets taken out of an export; nothing when there were none.
-function redactedNote(count: number): string {
-  return count === 0 ? '' : ` · ${count} secret${count === 1 ? '' : 's'} redacted`
+export function secretsText(secrets: AgentHistorySecrets): string {
+  const { count } = secrets
+  return secrets.isRedacted
+    ? `${count} secret${plural(count)} redacted in this session`
+    : `${count} possible secret${plural(count)} exported in this session (redaction is off)`
+}
+
+function plural(count: number): string {
+  return count === 1 ? '' : 's'
 }
 
 export function clockTime(ms: number): string {

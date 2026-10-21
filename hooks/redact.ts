@@ -9,8 +9,10 @@
 
 export type Redaction = {
   text: string
-  // How many secrets were replaced.
+  // How many secrets were found.
   count: number
+  // How many secrets of each kind were found.
+  kinds: Record<string, number>
 }
 
 type Rule = {
@@ -55,12 +57,14 @@ const REDACTED = /^\[REDACTED:/
 
 export function redactSecrets(text: string): Redaction {
   let count = 0
+  const kinds: Record<string, number> = {}
   let result = text
   for (const rule of RULES) {
     result = result.replace(rule.pattern, (match: string, ...groups: Array<unknown>) => {
       const secret = rule.group === undefined ? match : String(groups[rule.group - 1] ?? '')
       if (REDACTED.test(secret) || (rule.isSecret && !rule.isSecret(secret))) return match
       count += 1
+      kinds[rule.kind] = (kinds[rule.kind] ?? 0) + 1
       const label = `[REDACTED:${rule.kind}]`
       if (rule.group === undefined) return label
       const before = groups.slice(0, rule.group - 1).join('')
@@ -68,7 +72,7 @@ export function redactSecrets(text: string): Redaction {
       return `${before}${label}${after}`
     })
   }
-  return { text: result, count }
+  return { text: result, count, kinds }
 }
 
 function hasLetterAndDigit(value: string): boolean {

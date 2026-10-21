@@ -59,7 +59,7 @@ Claude Code keeps each transcript in plaintext under `~/.claude/projects`, with 
 | `url-password` | The password in a URL such as `postgres://user:password@host` |
 | `assignment` | The value of a name with `key`, `secret`, `token`, `password` or `credential` in it, when the value has letters and digits and is 12 or more characters long |
 
-The name before a secret stays, for example `API_KEY=[REDACTED:assignment]`. Placeholders such as `${TOKEN}`, `<your-key>` and `process.env.X` stay as they are. The activity log in the panel shows how many secrets each export redacted.
+The name before a secret stays, for example `API_KEY=[REDACTED:assignment]`. Placeholders such as `${TOKEN}`, `<your-key>` and `process.env.X` stay as they are. When an export finds a new secret, the activity log in the panel shows how many and of which kinds, and the status line shows `2 secrets redacted in this session`. With redaction off, the status line shows `2 possible secrets exported in this session (redaction is off)`. The status line stops to show it when you open the panel, and shows it again when a new secret is found. A failed export or push has priority in the status line.
 
 The redaction applies to the exported files only. The transcripts of Claude Code stay as they are, and files that were exported before you turned redaction on are not changed. The scan uses patterns, so it can miss a secret in an unknown format. If you pasted a secret into a session, rotate it.
 
@@ -75,7 +75,7 @@ The panel shows the export folder, the git state, the formats and the content fi
 - **+ Init git repo:** run `git init` in the export folder (shown when the folder is not a repository). The mod never runs `git init` by itself.
 - **✕ Close:** close the panel (or press Esc).
 
-The mod shows a status line only when there is a problem, for example `push failed` or `no remote`. The mod never creates a remote. To push, add one yourself, for example with `gh repo create <name> --private --source <folder> --push`.
+The mod shows a status line only when there is a problem, for example `push failed` or `no remote`, or when an export found a secret. The mod never creates a remote. To push, add one yourself, for example with `gh repo create <name> --private --source <folder> --push`.
 
 ## When it runs
 
