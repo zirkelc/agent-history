@@ -1,9 +1,11 @@
 import { describe, expect, test } from 'claude-code/testing'
 
-import { CWD, EXPORT_DIR, SESSION, SESSION_ID, TRANSCRIPT, world } from './fixtures/world'
+import { CWD, EXPORT_DIR, INDEX_LOCK, REBASE_DIR, SESSION, SESSION_ID, TRANSCRIPT, killedPull, world } from './fixtures/world'
 
 const OPTIONS = { options: { exportDir: '~/history' } }
 const COMMIT_DELAY_MS = 60_000
+/** The mocked clock's time at the start of each test. */
+const START = Date.UTC(2026, 9, 12, 12, 0)
 const SESSION_DIR = `${EXPORT_DIR}/sessions/${SESSION_ID}`
 const STOP = { session_id: SESSION_ID, transcript_path: TRANSCRIPT, cwd: CWD, stop_hook_active: false }
 
@@ -349,6 +351,164 @@ describe('register', () => {
     // Assert
     expect(w.files.has(`${SESSION_DIR}/${SESSION_ID}.md`)).toBe(false)
     expect(w.files.get(`${SESSION_DIR}/${SESSION_ID}.jsonl`)).not.toContain('tool_use')
+  })
+})
+
+describe('repair', () => {
+  test('a pull killed in its rebase is aborted, the exports are kept, then commit and push go on', OPTIONS, async ($, on) => {
+    // Arrange
+    const w = world(on, { isRepo: true, remotes: ['origin'], changed: ['sessions/session-0/session-0.md', `sessions/${SESSION_ID}/${SESSION_ID}.md`] })
+    killedPull(w.files)
+    await $.session.start(SESSION)
+
+    // Act
+    await $.classic.Stop(STOP)
+    await w.clock.advance(COMMIT_DELAY_MS)
+
+    // Assert
+    expect(w.files.has(INDEX_LOCK)).toBe(false)
+    expect(w.files.has(`${INDEX_LOCK}.stale`)).toBe(true)
+    expect([...w.files.keys()].some(path => path.startsWith(REBASE_DIR))).toBe(false)
+    const steps = w.gitRuns().filter(run => !run.startsWith('rev-parse') && !run.startsWith('branch') && !run.startsWith('remote'))
+    expect(steps).toEqual([
+      'ls-files --unmerged',
+      'read-tree HEAD',
+      'add -A',
+      'write-tree',
+      'commit-tree 7ree000',
+      'update-ref refs/agent-history/repair',
+      'diff --name-only',
+      'reset --quiet',
+      'clean -f',
+      'rebase --abort',
+      'checkout 5a95407',
+      'add -A',
+      'diff --cached',
+      'commit --quiet',
+      'push --quiet',
+    ])
+    const restore = w.runs.findIndex(argv => argv[1] === 'checkout')
+    expect(w.stdins.get(restore)).toBe(`sessions/session-0/session-0.md\0sessions/${SESSION_ID}/${SESSION_ID}.md\0`)
+    expect(w.statuses[w.statuses.length - 1]).toBe(undefined)
+  })
+
+  test('a stale index lock without a rebase is moved away', OPTIONS, async ($, on) => {
+    // Arrange
+    const w = world(on, { isRepo: true, remotes: ['origin'] })
+    w.files.set(INDEX_LOCK, '')
+    await $.session.start(SESSION)
+
+    // Act
+    await $.classic.Stop(STOP)
+    await w.clock.advance(COMMIT_DELAY_MS)
+
+    // Assert
+    expect(w.files.has(INDEX_LOCK)).toBe(false)
+    expect(w.gitRuns().filter(run => run.startsWith('rebase') || run.startsWith('reset'))).toEqual([])
+    expect(w.gitRuns().filter(run => run.startsWith('commit') || run.startsWith('push'))).toEqual(['commit --quiet', 'push --quiet'])
+    expect(w.statuses[w.statuses.length - 1]).toBe(undefined)
+  })
+
+  test('a young index lock is left to the git process that holds it', OPTIONS, async ($, on) => {
+    // Arrange
+    const w = world(on, { isRepo: true, remotes: ['origin'] })
+    killedPull(w.files)
+    w.mtimes.set(INDEX_LOCK, START + COMMIT_DELAY_MS)
+    await $.session.start(SESSION)
+
+    // Act
+    await $.classic.Stop(STOP)
+    await w.clock.advance(COMMIT_DELAY_MS)
+
+    // Assert
+    expect(w.files.has(INDEX_LOCK)).toBe(true)
+    expect(w.files.has(`${REBASE_DIR}/head-name`)).toBe(true)
+    expect(w.gitRuns().filter(run => run.startsWith('commit') || run.startsWith('rebase'))).toEqual([])
+    expect(w.statuses[w.statuses.length - 1]).toBe('repair failed')
+  })
+
+  test('a rebase that stopped for a person is not touched, and the panel says what to do', OPTIONS, async ($, on) => {
+    // Arrange
+    const w = world(on, { isRepo: true, remotes: ['origin'] })
+    killedPull(w.files, 'edit 2e8876b sync: session-0\n')
+    w.files.delete(INDEX_LOCK)
+    await $.session.start(SESSION)
+
+    // Act
+    await $.classic.Stop(STOP)
+    await w.clock.advance(COMMIT_DELAY_MS)
+
+    // Assert
+    expect(w.files.has(`${REBASE_DIR}/head-name`)).toBe(true)
+    expect(w.gitRuns().filter(run => run.startsWith('commit') || run.startsWith('rebase') || run.startsWith('reset'))).toEqual([])
+    expect(w.statuses[w.statuses.length - 1]).toBe('repair failed')
+    const ui = await mountPane($)
+    expect((await ui.find({ key: 'status' }))?.text).toBe(
+      `⚠ repair failed: a rebase in ${EXPORT_DIR} waits for a person; finish it with git rebase --continue, or run git rebase --abort there`,
+    )
+    await ui.unmount()
+  })
+
+  test('a push behind the remote merges in memory, pushes the merge, then moves the branch', OPTIONS, async ($, on) => {
+    // Arrange
+    const w = world(on, { isRepo: true, remotes: ['origin'], isBehind: true })
+    await $.session.start(SESSION)
+
+    // Act
+    await $.classic.Stop(STOP)
+    await w.clock.advance(COMMIT_DELAY_MS)
+
+    // Assert
+    const push = w.runs.findIndex(argv => argv[1] === 'push')
+    expect(w.runs.slice(push).filter(argv => argv[0] === 'git')).toEqual([
+      ['git', 'push', '--quiet', '-u', 'origin', 'HEAD:main'],
+      ['git', 'fetch', '--quiet', 'origin', '+refs/heads/main:refs/remotes/origin/main'],
+      ['git', 'rev-parse', 'HEAD^{commit}', 'refs/remotes/origin/main^{commit}'],
+      ['git', 'merge-tree', '--write-tree', 'abc1234', 'de10000'],
+      ['git', 'commit-tree', '3e4ee00', '-p', 'abc1234', '-p', 'de10000', '-m', 'sync: merge origin/main'],
+      ['git', 'push', '--quiet', 'origin', '3e4c000:refs/heads/main'],
+      ['git', 'read-tree', '-m', '-u', 'abc1234', '3e4c000'],
+      ['git', 'update-ref', 'refs/heads/main', '3e4c000', 'abc1234'],
+    ])
+    expect(w.statuses[w.statuses.length - 1]).toBe(undefined)
+  })
+
+  test('with a git older than 2.38, a push behind the remote rebases locally after the fetch', OPTIONS, async ($, on) => {
+    // Arrange
+    const w = world(on, { isRepo: true, remotes: ['origin'], isBehind: true, isOldGit: true })
+    await $.session.start(SESSION)
+
+    // Act
+    await $.classic.Stop(STOP)
+    await w.clock.advance(COMMIT_DELAY_MS)
+
+    // Assert
+    expect(w.runs.filter(argv => ['push', 'fetch', 'rebase', 'commit-tree', 'update-ref'].includes(argv[1] ?? ''))).toEqual([
+      ['git', 'push', '--quiet', '-u', 'origin', 'HEAD:main'],
+      ['git', 'fetch', '--quiet', 'origin', '+refs/heads/main:refs/remotes/origin/main'],
+      ['git', 'rebase', '--quiet', '--autostash', 'refs/remotes/origin/main'],
+      ['git', 'push', '--quiet', '-u', 'origin', 'HEAD:main'],
+    ])
+    expect(w.statuses[w.statuses.length - 1]).toBe(undefined)
+  })
+
+  test('a merge with a conflict changes nothing and says which file', OPTIONS, async ($, on) => {
+    // Arrange
+    const w = world(on, { isRepo: true, remotes: ['origin'], isBehind: true, isConflict: true })
+    await $.session.start(SESSION)
+
+    // Act
+    await $.classic.Stop(STOP)
+    await w.clock.advance(COMMIT_DELAY_MS)
+
+    // Assert
+    expect(w.gitRuns().filter(run => ['commit-tree', 'read-tree', 'update-ref', 'rebase'].some(step => run.startsWith(step)))).toEqual([])
+    expect(w.statuses[w.statuses.length - 1]).toBe('push failed')
+    const ui = await mountPane($)
+    expect((await ui.find({ key: 'status' }))?.text).toBe(
+      '⚠ push failed: the remote changed the same files: Merge conflict in sessions/x.md; merge refs/remotes/origin/main by hand',
+    )
+    await ui.unmount()
   })
 })
 

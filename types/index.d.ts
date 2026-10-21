@@ -12,7 +12,7 @@ export type AgentHistoryRepo = {
 /** One step of a sync, newest last in the log. */
 export type AgentHistoryLogEntry = {
   at: number
-  step: 'check' | 'init' | 'export' | 'secret' | 'commit' | 'push'
+  step: 'check' | 'init' | 'export' | 'secret' | 'repair' | 'commit' | 'push'
   isOk: boolean
   message: string
 }

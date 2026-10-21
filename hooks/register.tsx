@@ -88,6 +88,7 @@ function hostOf($: EngineInterface): Host {
     write: (path, text) => $.fs.write(path, text),
     exists: path => $.fs.exists(path),
     size: async path => (await $.fs.stat(path)).size,
+    mtime: async path => (await $.fs.stat(path)).mtimeMs,
     home: () => $.env.get('HOME'),
     now: () => $.clock.now(),
     sleep: ms => $.clock.sleep(ms),

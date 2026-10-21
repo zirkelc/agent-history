@@ -5,7 +5,7 @@ import { expandHome } from './config'
 import type { Config } from './config'
 import { SESSIONS_DIR, exportAgent, exportSession } from './exporter'
 import type { AgentSource, SessionSource } from './exporter'
-import { commit, initRepo, push, repoState } from './git'
+import { commit, initRepo, push, repair, repoState } from './git'
 import type { Host } from './host'
 import type { RepoState } from './git'
 import type { Redaction } from './redact'
@@ -122,6 +122,14 @@ export function createSync(host: Host, config: Config) {
     const { pending } = await host.readStatus()
     const message = pending.length > 0 ? `sync: ${pending.join(', ')}` : 'sync'
 
+    /** A git process killed in an earlier sync, of this session or another, can leave the repository so that no commit works. */
+    try {
+      const repaired = await repair(host, exportDir, [SESSIONS_DIR])
+      if (repaired) await record('repair', true, repaired)
+    } catch (error) {
+      return fail('repair', error)
+    }
+
     let sha: string | undefined
     try {
       sha = await commit(host, exportDir, [SESSIONS_DIR], message)
@@ -135,7 +143,7 @@ export function createSync(host: Host, config: Config) {
       ...value,
       pending: value.pending.filter(id => !pending.includes(id)),
       lastCommit: sha ? { sha, at } : value.lastCommit,
-      warning: value.warning === 'commit failed' ? undefined : value.warning,
+      warning: value.warning === 'commit failed' || value.warning === 'repair failed' ? undefined : value.warning,
     }))
 
     if (!config.autoPush || !repo.remote) return
