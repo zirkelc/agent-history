@@ -4,6 +4,7 @@ A Claude Code mod that keeps a history of your sessions. After each turn, it exp
 
 - **Formats:** JSONL (raw or filtered) and/or Markdown, plus a `meta.json` file for each session.
 - **Filters:** keep only the content you want (text, tool calls, tool input, tool results, thinking, meta rows), so the files stay small.
+- **Secrets redacted:** API keys, tokens, passwords and private keys are replaced with `[REDACTED:<kind>]` before a file is written, so they do not get into the git history. On by default.
 - **Git is optional:** a plain folder gets the export only. A repository gets a commit. A repository with a remote also gets a push.
 - **Self-contained:** everything runs in Claude Code's lifecycle hooks. No launchd jobs, no cron, no settings hooks.
 
@@ -33,10 +34,34 @@ Open `/config` and search for `agent-history` to change the settings.
 | Include tool results | off | Keep tool results (the largest part of a transcript) |
 | Include thinking | off | Keep thinking blocks |
 | Include meta rows | off | Keep rows Claude Code adds itself (reminders, attachments, system rows) |
+| Redact secrets | on | Replace secrets in the exported files with `[REDACTED:<kind>]` (see below) |
 | Push after commit | on | Push each commit when the repository has a remote |
 | Commit delay (seconds) | 60 | Wait this long after the last export, so turns close together make one commit |
 
-With every content filter on, the JSONL file is the raw transcript.
+With every content filter on, the JSONL file is the raw transcript, with only the secrets replaced.
+
+### Secret redaction
+
+Claude Code keeps each transcript in plaintext under `~/.claude/projects`, with everything you pasted and every tool output. The mod scans each exported file and replaces these secrets with `[REDACTED:<kind>]`:
+
+| Kind | What it finds |
+| --- | --- |
+| `private-key` | PEM private key blocks |
+| `anthropic`, `openai` | `sk-ant-…` and `sk-…` API keys |
+| `github` | `ghp_`, `gho_`, `ghu_`, `ghs_`, `ghr_` and `github_pat_` tokens |
+| `aws` | AWS access key IDs (`AKIA…`, `ASIA…`) |
+| `google` | Google API keys (`AIza…`) |
+| `stripe` | Stripe secret and restricted keys |
+| `slack`, `slack-webhook` | Slack tokens (`xox…-`) and webhook URLs |
+| `npm` | npm tokens |
+| `jwt` | JSON Web Tokens |
+| `bearer` | The token after `Bearer` |
+| `url-password` | The password in a URL such as `postgres://user:password@host` |
+| `assignment` | The value of a name with `key`, `secret`, `token`, `password` or `credential` in it, when the value has letters and digits and is 12 or more characters long |
+
+The name before a secret stays, for example `API_KEY=[REDACTED:assignment]`. Placeholders such as `${TOKEN}`, `<your-key>` and `process.env.X` stay as they are. The activity log in the panel shows how many secrets each export redacted.
+
+The redaction applies to the exported files only. The transcripts of Claude Code stay as they are, and files that were exported before you turned redaction on are not changed. The scan uses patterns, so it can miss a secret in an unknown format. If you pasted a secret into a session, rotate it.
 
 ## Usage
 
@@ -113,6 +138,7 @@ These examples show one short session with the default settings (text and tool c
       "thinking": false,
       "meta": false
     },
+    "redactSecrets": true,
     "exportedAt": "2026-10-12T09:00:06.000Z"
   }
 }

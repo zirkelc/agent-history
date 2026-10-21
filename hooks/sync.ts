@@ -137,25 +137,28 @@ export function createSync(host: Host, config: Config) {
       sources.set(source.sessionId, source)
       return enqueue(async () => {
         if (!exportDir) return
+        let redacted = 0
         try {
-          await exportSession(host, config, exportDir, source)
+          redacted = await exportSession(host, config, exportDir, source)
         } catch (error) {
           return fail('export', error)
         }
-        await exported(source.sessionId, `session ${source.sessionId}`)
+        await exported(source.sessionId, `session ${source.sessionId}${redactedNote(redacted)}`)
       })
     },
 
     exportAgent(source: AgentSource) {
       return enqueue(async () => {
         if (!exportDir) return
+        let redacted = 0
         try {
-          const isSaved = await exportAgent(host, config, exportDir, source)
-          if (!isSaved) return
+          const result = await exportAgent(host, config, exportDir, source)
+          if (result === false) return
+          redacted = result
         } catch (error) {
           return fail('export', error)
         }
-        await exported(source.sessionId, `agent ${source.agentType} ${source.agentId}`)
+        await exported(source.sessionId, `agent ${source.agentType} ${source.agentId}${redactedNote(redacted)}`)
       })
     },
 
@@ -207,6 +210,11 @@ export function createSync(host: Host, config: Config) {
  */
 export function statusLine(value: AgentHistoryStatus): string | undefined {
   return value.warning
+}
+
+// The log's note for secrets taken out of an export; nothing when there were none.
+function redactedNote(count: number): string {
+  return count === 0 ? '' : ` · ${count} secret${count === 1 ? '' : 's'} redacted`
 }
 
 export function clockTime(ms: number): string {

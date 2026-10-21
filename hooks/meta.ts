@@ -28,6 +28,7 @@ export type SessionMeta = {
   export: {
     formats: Array<Format>
     filters: Filters
+    redactSecrets?: boolean
     exportedAt: string
   }
 }

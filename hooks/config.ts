@@ -8,6 +8,8 @@ export type Config = {
   exportDir: string
   formats: Array<Format>
   filters: Filters
+  /** Whether secrets in the exported files are replaced with a marker. */
+  redactSecrets: boolean
   autoPush: boolean
   commitDelayMs: number
 }
@@ -34,6 +36,7 @@ export function configOf(options: PluginOptions): Config {
       thinking: flag('includeThinking', false),
       meta: flag('includeMeta', false),
     },
+    redactSecrets: flag('redactSecrets', true),
     autoPush: flag('autoPush', true),
     commitDelayMs: Math.max(0, seconds) * 1_000,
   }

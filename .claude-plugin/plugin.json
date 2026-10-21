@@ -1,6 +1,6 @@
 {
   "name": "agent-history",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "description": "Agent History: exports every Claude Code session and its subagents to a folder, and commits and pushes it when the folder is a git repository",
   "author": {
     "name": "Chris Cook"
@@ -60,6 +60,12 @@
       "title": "Include meta rows",
       "description": "Keep rows Claude Code adds itself: reminders, attachments, system rows, summaries.",
       "default": false
+    },
+    "redactSecrets": {
+      "type": "boolean",
+      "title": "Redact secrets",
+      "description": "Replace API keys, tokens, passwords and private keys in the exported files with [REDACTED:<kind>]. The transcripts of Claude Code stay as they are.",
+      "default": true
     },
     "autoPush": {
       "type": "boolean",

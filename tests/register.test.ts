@@ -211,6 +211,41 @@ describe('register', () => {
     expect(w.statuses[w.statuses.length - 1]).toBe(undefined)
   })
 
+  test('a secret in the transcript is redacted in every exported file', OPTIONS, async ($, on) => {
+    // Arrange
+    const w = world(on)
+    const secret = 'sk-' + 'ant-api03-' + 'Ab1'.repeat(10)
+    w.files.set(TRANSCRIPT, (w.files.get(TRANSCRIPT) ?? '').replace('Fix the bug', `Fix the bug, the key is ${secret}`))
+    await $.session.start(SESSION)
+
+    // Act
+    await $.classic.Stop(STOP)
+    await w.clock.settle()
+
+    // Assert
+    const jsonl = w.files.get(`${SESSION_DIR}/${SESSION_ID}.jsonl`) ?? ''
+    const markdown = w.files.get(`${SESSION_DIR}/${SESSION_ID}.md`) ?? ''
+    expect(jsonl.includes(secret) || markdown.includes(secret)).toBe(false)
+    expect(markdown).toContain('the key is [REDACTED:anthropic]')
+    expect(JSON.parse(jsonl.split('\n')[0] ?? '').message.content).toBe('Fix the bug, the key is [REDACTED:anthropic]')
+    expect(JSON.parse(w.files.get(`${SESSION_DIR}/${SESSION_ID}.meta.json`) ?? '{}').export.redactSecrets).toBe(true)
+  })
+
+  test('with redaction off, a secret is exported as it is', { options: { exportDir: '~/history', redactSecrets: false } }, async ($, on) => {
+    // Arrange
+    const w = world(on)
+    const secret = 'sk-' + 'ant-api03-' + 'Ab1'.repeat(10)
+    w.files.set(TRANSCRIPT, (w.files.get(TRANSCRIPT) ?? '').replace('Fix the bug', `Fix the bug, the key is ${secret}`))
+    await $.session.start(SESSION)
+
+    // Act
+    await $.classic.Stop(STOP)
+    await w.clock.settle()
+
+    // Assert
+    expect(w.files.get(`${SESSION_DIR}/${SESSION_ID}.md`)).toContain(secret)
+  })
+
   test('formats and filters follow the config', { options: { exportDir: '~/history', exportMarkdown: false, includeToolUse: false } }, async ($, on) => {
     // Arrange
     const w = world(on)

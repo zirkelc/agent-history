@@ -44,8 +44,8 @@ const SYNC_ICON = '⇅'
 /** The columns a row's label takes, so the values of every row start in one column. */
 const LABEL_WIDTH = 'Content'.length
 
-/** The rows around the log: header and margin, five info rows and the hint, two rules, the log's title, the status line. */
-const OUTER_ROWS = 2 + 6 + 2 + 1 + 1
+/** The rows around the log: header and margin, six info rows and the hint, two rules, the log's title, the status line. */
+const OUTER_ROWS = 2 + 7 + 2 + 1 + 1
 
 /** The width of the step column in the log. */
 const STEP_WIDTH = 'commit'.length
@@ -179,6 +179,12 @@ function infoView(ui: Ui, model: PaneModel): Array<RenderElement> {
     row(ui, 'git', 'Git', gitValue(ui, model)),
     row(ui, 'formats', 'Formats', formats),
     row(ui, 'content', 'Content', fit(content || 'nothing', model.columns - LABEL_WIDTH - 1)),
+    row(
+      ui,
+      'secrets',
+      'Secrets',
+      config.redactSecrets ? 'redacted' : <Text color="yellow">kept: exported as they are</Text>,
+    ),
     <Text key="hint" dimColor italic wrap="truncate">
       {fit('Change the settings in /config', model.columns)}
     </Text>,
