@@ -15,6 +15,8 @@ export type Host = {
   write: (path: string, text: string) => Promise<void>
   exists: (path: string) => Promise<boolean>
   size: (path: string) => Promise<number>
+  /** Last modification, milliseconds since the epoch. */
+  mtime: (path: string) => Promise<number>
   /** The home directory, for an export folder written with `~`. */
   home: () => Promise<string | undefined>
   now: () => Promise<number>
