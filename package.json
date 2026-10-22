@@ -6,8 +6,8 @@
   "license": "MIT",
   "packageManager": "pnpm@9.15.0",
   "scripts": {
-    "validate": "claude plugin validate .",
-    "test": "claude plugin test .",
+    "validate": "claude plugin validate claude-code",
+    "test": "claude plugin test claude-code",
     "check": "pnpm validate && pnpm test",
     "prepare": "simple-git-hooks"
   },

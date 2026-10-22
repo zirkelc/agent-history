@@ -189,7 +189,7 @@ pnpm install
 pnpm check
 ```
 
-`pnpm check` runs `claude plugin validate .` and `claude plugin test .`. `pnpm install` also sets up a git pre-commit hook (with `simple-git-hooks`) that runs `pnpm check` before each commit.
+The plugin is in [`claude-code/`](claude-code). The rest of the repository (this README, the recordings in `assets/` and CI) is not installed. `pnpm check` runs `claude plugin validate claude-code` and `claude plugin test claude-code`. `pnpm install` also sets up a git pre-commit hook (with `simple-git-hooks`) that runs `pnpm check` before each commit.
 
 The images in this README are live takes. [`assets/tapes/`](assets/tapes) holds the tapes and the scripts that record them again.
 

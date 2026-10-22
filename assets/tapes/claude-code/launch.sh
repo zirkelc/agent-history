@@ -11,7 +11,7 @@ clear
 exec env -i HOME="$DEMO_HOME" USER="$USER" LOGNAME="$LOGNAME" PATH="$PATH" TERM="$TERM" \
   LANG=en_US.UTF-8 SHELL=/bin/zsh TMPDIR="$TMPDIR" \
   DISABLE_AUTOUPDATER=1 \
-  claude --plugin-dir "$REPO" \
+  claude --plugin-dir "$REPO/claude-code" \
     --strict-mcp-config \
     --permission-mode auto \
     --allowedTools "Edit(/$DEMO_HOME/Developer/my-awesome-lib/**)" \
