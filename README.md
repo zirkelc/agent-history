@@ -2,6 +2,11 @@
 
 A Claude Code mod that keeps a history of your sessions. After each turn, it exports the session and its subagents to a folder you choose. When that folder is a git repository, the mod commits the export and pushes it.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/session-dark.gif" />
+  <img src="assets/session-light.gif" alt="Claude Code changes a function with the agent-history panel open. When the turn ends, the panel logs the export, the commit and the push, then the shell shows the exported session files and the git log" />
+</picture>
+
 - **Formats:** JSONL (raw or filtered) and/or Markdown, plus a `meta.json` file for each session.
 - **Filters:** keep only the content you want (text, tool calls, tool input, tool results, thinking, meta rows), so the files stay small.
 - **Secrets redacted:** API keys, tokens, passwords and private keys are replaced with `[REDACTED:<kind>]` before a file is written, so they do not get into the git history. On by default.
@@ -74,6 +79,11 @@ The panel shows the export folder, the git state, the formats and the content fi
 - **⇅ Sync now:** commit and push the pending exports at once (shown when the folder is a git repository).
 - **+ Init git repo:** run `git init` in the export folder (shown when the folder is not a repository). The mod never runs `git init` by itself.
 - **✕ Close:** close the panel (or press Esc).
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/pane-dark.png" />
+  <img src="assets/pane-light.png" alt="The agent-history panel beside the chat, after a turn: the session, the export folder, the git remote, the formats and the content, and the activity log with the export, the commit and the push" />
+</picture>
 
 The mod shows a status line only when there is a problem, for example `push failed` or `no remote`, or when an export found a secret. The mod never creates a remote. To push, add one yourself, for example with `gh repo create <name> --private --source <folder> --push`.
 
@@ -180,6 +190,8 @@ pnpm check
 ```
 
 `pnpm check` runs `claude plugin validate .` and `claude plugin test .`. `pnpm install` also sets up a git pre-commit hook (with `simple-git-hooks`) that runs `pnpm check` before each commit.
+
+The images in this README are live takes. [`assets/tapes/`](assets/tapes) holds the tapes and the scripts that record them again.
 
 ## License
 

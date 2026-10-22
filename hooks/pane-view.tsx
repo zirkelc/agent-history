@@ -21,6 +21,8 @@ export type PaneModel = {
   log: ReadonlyArray<AgentHistoryLogEntry>
   /** The session the log belongs to; each session has its own log. */
   sessionId: string
+  /** The home folder, shown as `~` at the start of a path. */
+  home: string
   config: Config
   /** The columns inside the pane's padding. */
   columns: number
@@ -122,6 +124,14 @@ export function pathFit(path: string, width: number): string {
   return width <= 1 ? '…' : `…${chars.slice(chars.length - width + 1).join('')}`
 }
 
+/** A path with the home folder at its start written as `~`. */
+export function homeFit(path: string, home: string): string {
+  const base = home.replace(/\/+$/, '')
+  if (!base) return path
+  if (path === base) return '~'
+  return path.startsWith(`${base}/`) ? `~${path.slice(base.length)}` : path
+}
+
 /** A text cut at the end to a width. */
 export function fit(text: string, width: number): string {
   const chars = [...text.replace(/\s+/g, ' ')]
@@ -174,7 +184,7 @@ function infoView(ui: Ui, model: PaneModel): Array<RenderElement> {
       ui,
       'folder',
       'Folder',
-      folder ? pathFit(folder, model.columns - LABEL_WIDTH - 1) : <Text color="yellow">not set: /config</Text>,
+      folder ? pathFit(homeFit(folder, model.home), model.columns - LABEL_WIDTH - 1) : <Text color="yellow">not set: /config</Text>,
     ),
     row(ui, 'git', 'Git', gitValue(ui, model)),
     row(ui, 'formats', 'Formats', formats),

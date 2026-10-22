@@ -107,7 +107,12 @@ async function renderPane(
   syncOf: () => Sync | undefined,
 ) {
   const { Box, Text, Button } = $.ui.resolve(e)
-  const [value, entries, sessionId] = await Promise.all([read($, status), read($, log), $.session.id()])
+  const [value, entries, sessionId, home] = await Promise.all([
+    read($, status),
+    read($, log),
+    $.session.id(),
+    $.env.get('HOME'),
+  ])
 
   return paneView(
     { Box, Text, Button },
@@ -120,6 +125,7 @@ async function renderPane(
       status: value,
       log: entries,
       sessionId,
+      home: home ?? '',
       config,
       columns: Math.max(e.props.bodyColumns - 2 * PADDING - 1, 20),
       bodyRows: e.props.scroll.bodyRows,

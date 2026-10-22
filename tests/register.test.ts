@@ -539,6 +539,21 @@ async function logTexts(ui: Awaited<ReturnType<typeof mountPane>>): Promise<Arra
 }
 
 describe('pane', () => {
+  test('shows a folder in the home folder with ~', OPTIONS, async ($, on) => {
+    // Arrange
+    const w = world(on)
+    await $.session.start(SESSION)
+    await w.clock.settle()
+
+    // Act
+    const ui = await mountPane($)
+    const folder = (await ui.find({ key: 'folder' }))?.text
+
+    // Assert
+    expect(folder).toBe('Folder ~/history')
+    await ui.unmount()
+  })
+
   for (const surface of ['terminal', 'desktop'] as const) {
     test(`offers git init for a plain folder and runs it on press (${surface})`, OPTIONS, async ($, on) => {
       // Arrange

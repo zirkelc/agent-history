@@ -1,6 +1,6 @@
 {
   "name": "agent-history",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "private": true,
   "description": "Claude Code mod that exports your sessions to a folder and syncs them with git",
   "license": "MIT",
