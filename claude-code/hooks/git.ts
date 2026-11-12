@@ -110,7 +110,8 @@ export async function commit(
 /**
  * Pushes the current branch. A push the remote rejects as behind fetches the
  * remote and pushes a merge of the two: each session writes only its own
- * folder, so the merge does not conflict.
+ * folder, so the merge does not conflict, except where one session was
+ * exported on two machines; that merge takes the longer transcript.
  *
  * The fetch is the slow step and the one the short timeout of the session's
  * end can kill; a killed fetch leaves nothing half done. The merge is made in
@@ -155,20 +156,131 @@ async function mergeAndPush(
   const [head, theirs] = (await gitOk(host, dir, ['rev-parse', 'HEAD^{commit}', `${tracking}^{commit}`])).split('\n')
   if (!head || !theirs) throw new Error(`could not read HEAD and ${tracking}`)
 
-  const merge = ['merge-tree', '--write-tree', head, theirs]
+  const merge = ['merge-tree', '--write-tree', '--name-only', head, theirs]
   const result = await git(host, dir, merge)
   if (result.exitCode > 1) return false
-  if (result.exitCode === 1) {
-    const conflicts = result.stdout.split('\n').filter(line => line.startsWith('CONFLICT')).map(line => line.replace(/^CONFLICT \([^)]*\): /, ''))
-    throw new Error(`the remote changed the same files: ${conflicts.join(', ')}; merge ${tracking} by hand`)
-  }
 
-  const tree = result.stdout.trim().split('\n')[0] ?? ''
+  const [written = '', ...rest] = result.stdout.split('\n')
+  const tree =
+    result.exitCode === 1 ? await resolveSessions({ host, dir, head, theirs, tracking, tree: written.trim(), output: rest }) : written.trim()
+
   const commit = await gitOk(host, dir, ['commit-tree', tree, '-p', head, '-p', theirs, '-m', `sync: merge ${remote}/${branch}`])
   await gitOk(host, dir, ['push', '--quiet', remote, `${commit}:refs/heads/${branch}`], timeoutMs)
+
+  /**
+   * Other sessions commit into the same repository at any time, so the two
+   * steps below can never be one. The index and the work tree move first:
+   * when the branch then does not move, they go back to where the branch is,
+   * and when a kill stops between the two, the merged files are left as
+   * changes that only the next merge takes in. The other order is not safe:
+   * a branch moved first, with the index left behind it by a kill or a lock,
+   * shows the remote's files as removed, and every later merge stops on them.
+   */
   await gitOk(host, dir, ['read-tree', '-m', '-u', head, commit])
-  await gitOk(host, dir, ['update-ref', `refs/heads/${branch}`, commit, head])
-  return true
+  const moved = await git(host, dir, ['update-ref', `refs/heads/${branch}`, commit, head])
+  if (moved.exitCode === 0) return true
+
+  const now = await gitOk(host, dir, ['rev-parse', 'HEAD^{commit}'])
+  await gitOk(host, dir, ['read-tree', '-m', '-u', commit, now])
+  throw new Error(`another session committed while ${tracking} was merged; the next sync merges again`)
+}
+
+/** A session file: the transcript, its Markdown or the session's meta, of the session itself or of one of its agents. */
+const SESSION_FILE = /^(sessions\/[^/]+\/(?:agents\/)?[^/]+?)\.(?:jsonl|md|meta\.json)$/
+
+/**
+ * Resolves a merge whose conflicts are all in session files. One session
+ * exported on two machines, as when it is resumed on the other one, writes
+ * the same files on both. A transcript only grows, so the side with the
+ * longer transcript has every entry of the other: it is taken for the
+ * transcript, its Markdown and, for the session itself, the meta. Any other
+ * conflict, or a shorter transcript with an entry the longer one does not
+ * have, throws, since a side taken then would lose data.
+ *
+ * Resolves the merged tree with the taken files in place of the conflicted ones.
+ */
+async function resolveSessions(input: {
+  host: Host
+  dir: string
+  head: string
+  theirs: string
+  tracking: string
+  /** The tree the merge wrote, with conflict markers in the conflicted files. */
+  tree: string
+  /** The output of `merge-tree --name-only` after the tree: the conflicted files, an empty line, then the messages. */
+  output: Array<string>
+}): Promise<string> {
+  const { host, dir, head, theirs, tracking, tree, output } = input
+  const end = output.indexOf('')
+  const conflicted = output.slice(0, end === -1 ? output.length : end).filter(Boolean)
+  const messages = output.filter(line => line.startsWith('CONFLICT')).map(line => line.replace(/^CONFLICT \([^)]*\): /, ''))
+  const fail = () => new Error(`the remote changed the same files: ${messages.join(', ')}; merge ${tracking} by hand`)
+
+  const groups = new Map<string, Array<string>>()
+  for (const path of conflicted) {
+    const base = SESSION_FILE.exec(path)?.[1]
+    if (!base) throw fail()
+    groups.set(base, [...(groups.get(base) ?? []), path])
+  }
+  if (groups.size === 0) throw fail()
+
+  const taken: Array<{ path: string; side: string }> = []
+  for (const [base, paths] of groups) {
+    const ours = await blobText(host, dir, head, `${base}.jsonl`)
+    const other = await blobText(host, dir, theirs, `${base}.jsonl`)
+    if (ours === undefined || other === undefined) throw fail()
+
+    const side = longerSide({ ours: lines(ours), theirs: lines(other) })
+    if (!side) throw fail()
+    for (const path of paths) taken.push({ path, side: side === 'ours' ? head : theirs })
+  }
+
+  const gitDir = await gitOk(host, dir, ['rev-parse', '--absolute-git-dir'])
+  const env = { GIT_INDEX_FILE: `${gitDir}/agent-history-merge-index` }
+  await gitOk(host, dir, ['read-tree', tree], undefined, { env })
+  for (const { path, side } of taken) {
+    const entry = await gitOk(host, dir, ['ls-tree', side, '--', path])
+    if (entry) await gitOk(host, dir, ['update-index', '--index-info'], undefined, { env, stdin: `${entry}\n` })
+    else await gitOk(host, dir, ['update-index', '--force-remove', '--', path], undefined, { env })
+  }
+  return gitOk(host, dir, ['write-tree'], undefined, { env })
+}
+
+/**
+ * The side whose transcript has every entry of the other: the one with more
+ * lines, the remote on a tie. Undefined when the shorter one has an entry,
+ * by its uuid, that the longer one does not have.
+ */
+function longerSide(input: { ours: Array<string>; theirs: Array<string> }): 'ours' | 'theirs' | undefined {
+  const side = input.ours.length > input.theirs.length ? 'ours' : 'theirs'
+  const [longer, shorter] = side === 'ours' ? [input.ours, input.theirs] : [input.theirs, input.ours]
+  const known = new Set(longer.map(uuidOf))
+  return shorter.every(line => {
+    const uuid = uuidOf(line)
+    return uuid === undefined || known.has(uuid)
+  })
+    ? side
+    : undefined
+}
+
+function lines(text: string): Array<string> {
+  return text.split('\n').filter(line => line.trim())
+}
+
+function uuidOf(line: string): string | undefined {
+  try {
+    const uuid = (JSON.parse(line) as { uuid?: unknown }).uuid
+    return typeof uuid === 'string' ? uuid : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** The text of a file in a commit, streamed, as a transcript can be larger than a run's output limit; undefined when the commit has no such file. */
+async function blobText(host: Host, dir: string, commit: string, path: string): Promise<string | undefined> {
+  const exists = await git(host, dir, ['cat-file', '-e', `${commit}:${path}`])
+  if (exists.exitCode !== 0) return undefined
+  return host.runText(['git', '-C', dir, 'cat-file', 'blob', `${commit}:${path}`])
 }
 
 /** Rebases the branch onto the fetched remote. A rebase that fails is aborted at once, so the next sync does not find it half done. */

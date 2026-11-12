@@ -78,6 +78,21 @@ describe('register', () => {
     expect(push).toEqual(['git', 'push', '--quiet', '-u', 'origin', 'HEAD:main'])
   })
 
+  test('a sync stages and commits only the folder of its own session', OPTIONS, async ($, on) => {
+    // Arrange
+    const w = world(on, { isRepo: true, remotes: ['origin'] })
+    await $.session.start(SESSION)
+    await $.classic.Stop(STOP)
+    await w.clock.settle()
+
+    // Act
+    await w.clock.advance(COMMIT_DELAY_MS)
+
+    // Assert
+    const staged = w.runs.filter(argv => argv[1] === 'add' || argv[1] === 'commit').map(argv => argv.slice(argv.indexOf('--') + 1))
+    expect(staged).toEqual([[`sessions/${SESSION_ID}`], [`sessions/${SESSION_ID}`]])
+  })
+
   test('a repository without a remote commits and warns', OPTIONS, async ($, on) => {
     // Arrange
     const w = world(on, { isRepo: true })
@@ -464,7 +479,7 @@ describe('repair', () => {
       ['git', 'push', '--quiet', '-u', 'origin', 'HEAD:main'],
       ['git', 'fetch', '--quiet', 'origin', '+refs/heads/main:refs/remotes/origin/main'],
       ['git', 'rev-parse', 'HEAD^{commit}', 'refs/remotes/origin/main^{commit}'],
-      ['git', 'merge-tree', '--write-tree', 'abc1234', 'de10000'],
+      ['git', 'merge-tree', '--write-tree', '--name-only', 'abc1234', 'de10000'],
       ['git', 'commit-tree', '3e4ee00', '-p', 'abc1234', '-p', 'de10000', '-m', 'sync: merge origin/main'],
       ['git', 'push', '--quiet', 'origin', '3e4c000:refs/heads/main'],
       ['git', 'read-tree', '-m', '-u', 'abc1234', '3e4c000'],

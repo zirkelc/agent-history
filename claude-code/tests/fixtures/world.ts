@@ -137,7 +137,7 @@ function gitAnswer(
       return ok()
     case 'merge-tree':
       if (options.isOldGit) return result(129, '', "error: unknown option `write-tree'")
-      if (options.isConflict) return result(1, '3e4ee11\n\n1 file changed\nCONFLICT (content): Merge conflict in sessions/x.md\n')
+      if (options.isConflict) return result(1, '3e4ee11\nsessions/x.md\n\nAuto-merging sessions/x.md\nCONFLICT (content): Merge conflict in sessions/x.md\n')
       return ok('3e4ee00\n')
     case 'write-tree':
       return ok('7ree000\n')

@@ -8,7 +8,7 @@ import type { Redaction } from './redact'
 import { renderMarkdown } from './render'
 import { filterTranscript, keepsEverything, parseTranscript, serializeTranscript } from './transcript'
 
-/** The folder under the export folder that holds every session; the only path a commit stages. */
+/** The folder under the export folder that holds every session; a commit stages only the folders of its session in it. */
 export const SESSIONS_DIR = 'sessions'
 
 /** The engine refuses file reads past 4 MiB; larger transcripts stream through `cat` instead. */

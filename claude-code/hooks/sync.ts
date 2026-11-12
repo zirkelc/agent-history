@@ -3,7 +3,7 @@ import type { Timer } from 'claude-code'
 import type { AgentHistoryLogEntry, AgentHistoryMode, AgentHistorySecrets, AgentHistoryStatus } from '../types'
 import { expandHome } from './config'
 import type { Config } from './config'
-import { SESSIONS_DIR, exportAgent, exportSession } from './exporter'
+import { SESSIONS_DIR, exportAgent, exportSession, sessionDirOf } from './exporter'
 import type { AgentSource, SessionSource } from './exporter'
 import { commit, initRepo, push, repair, repoState } from './git'
 import type { Host } from './host'
@@ -122,7 +122,11 @@ export function createSync(host: Host, config: Config) {
     const { pending } = await host.readStatus()
     const message = pending.length > 0 ? `sync: ${pending.join(', ')}` : 'sync'
 
-    /** A git process killed in an earlier sync, of this session or another, can leave the repository so that no commit works. */
+    /**
+     * A git process killed in an earlier sync, of this session or another, can
+     * leave the repository so that no commit works. The repair resets the whole
+     * work tree, so it keeps the files of every session, not only this one's.
+     */
     try {
       const repaired = await repair(host, exportDir, [SESSIONS_DIR])
       if (repaired) await record('repair', true, repaired)
@@ -130,9 +134,20 @@ export function createSync(host: Host, config: Config) {
       return fail('repair', error)
     }
 
+    /**
+     * Only the folders of this session's exports: other sessions commit their
+     * own under their own message, and a file another session or a merge left
+     * in the work tree must not land in this commit. A folder the export never
+     * wrote is left out, since git refuses a path that matches nothing.
+     */
+    const paths: Array<string> = []
+    for (const id of pending) {
+      if (await host.exists(`${sessionDirOf(exportDir, id)}/${id}.meta.json`)) paths.push(`${SESSIONS_DIR}/${id}`)
+    }
+
     let sha: string | undefined
     try {
-      sha = await commit(host, exportDir, [SESSIONS_DIR], message)
+      sha = paths.length > 0 ? await commit(host, exportDir, paths, message) : undefined
     } catch (error) {
       return fail('commit', error)
     }
